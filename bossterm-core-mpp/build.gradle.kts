@@ -4,18 +4,12 @@ import com.vanniktech.maven.publish.JavadocJar
 
 plugins {
     kotlin("multiplatform")
-    id("com.android.kotlin.multiplatform.library")
     id("com.vanniktech.maven.publish")
 }
 
 kotlin {
-    jvmToolchain(17)
-    jvm()
-    android {
-        namespace = "ai.rever.bossterm"
-        compileSdk = 36
-        minSdk = 24
-        withJava()
+    jvmToolchain(25)
+    jvm {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }

@@ -39,7 +39,7 @@ repositories {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(25)
 
     // Note: Android target removed from compose-ui - no androidMain source set exists
     // The core library (bossterm-core-mpp) supports Android
