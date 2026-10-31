@@ -105,50 +105,11 @@ kotlin {
                 implementation(compose.desktop.currentOs)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0")
                 implementation("org.jetbrains.pty4j:pty4j:0.13.13")
-
-                // JNA for native macOS notifications
-                implementation("net.java.dev.jna:jna:5.19.1")
-                implementation("net.java.dev.jna:jna-platform:5.19.1")
-
-                // Ktor client for auto-update
-                implementation(project.dependencies.platform("io.ktor:ktor-bom:$ktorVersion"))
-                implementation("io.ktor:ktor-client-core:$ktorVersion")
-                implementation("io.ktor:ktor-client-cio:$ktorVersion")
-                implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-                implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
-                // WebSocket client — native viewer that connects to a remote BossTerm share.
-                implementation("io.ktor:ktor-client-websockets:$ktorVersion")
-
-                // Supabase Realtime — push notifications for new app releases so the
-                // self-updater learns about them instantly instead of polling GitHub.
-                // Realtime only; the release catalog is fetched via plain Ktor REST.
-                implementation("io.github.jan-tennert.supabase:realtime-kt:3.8.0")
-
-                // MCP (Model Context Protocol) server + Ktor CIO server backend.
-                // `api` for the SDK because BossTermMcpConfig's additionalTools
-                // hook exposes the SDK's Server type to embedders, which would
-                // otherwise be inaccessible from a downstream module.
-                api("io.modelcontextprotocol:kotlin-sdk-server:0.15.0")
-                // Use one Ktor release for client, server, and test artifacts.
-                implementation("io.ktor:ktor-server-cio:$ktorVersion")
-                // Streamable HTTP MCP endpoint (/mcp, for Codex): the SDK's
-                // JSON-response mode replies via call.respond(JSONRPCMessage),
-                // which needs server-side content negotiation (route-scoped to
-                // /mcp, wired to the SDK's McpJson).
-                implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
-                // Session sharing (issue #276): WebSocket endpoint for the web viewer.
-                implementation("io.ktor:ktor-server-websockets:$ktorVersion")
-                implementation("io.ktor:ktor-server-default-headers:$ktorVersion")
-                // QR code for the share dialog (pure-Java, no Android deps).
-                implementation("com.google.zxing:core:3.5.4")
             }
         }
 
         val desktopTest by getting {
             dependencies {
-                // In-process ktor app for the streamable HTTP MCP endpoint
-                // contract test (StreamableMcpSessionsTest).
-                implementation("io.ktor:ktor-server-test-host:$ktorVersion")
             }
         }
     }
