@@ -62,7 +62,10 @@ internal fun migrateSplitFocusBorderDefault(
  * @param customSettingsPath Optional custom path for settings file.
  *        If null, uses default ~/.bossterm/settings.json
  */
-class SettingsManager(private val customSettingsPath: String? = null) {
+class SettingsManager(
+    private val customSettingsPath: String? = null,
+    @Volatile private var persistent: Boolean = true,
+) {
     private val _settings = MutableStateFlow(TerminalSettings.DEFAULT)
 
     /**
@@ -137,7 +140,7 @@ class SettingsManager(private val customSettingsPath: String? = null) {
     }
 
     init {
-        loadFromFile()
+        if (persistent) loadFromFile()
     }
 
     /**
@@ -229,10 +232,12 @@ class SettingsManager(private val customSettingsPath: String? = null) {
      * last persisted. Caller holds [saveLock] so the read→modify→write is atomic against other writers
      * in THIS process; cross-process atomicity comes from the unique-temp + rename in [writeToFileLocked].
      */
-    private fun currentOnDiskOrMemory(): TerminalSettings = readFromDisk() ?: _settings.value
+    private fun currentOnDiskOrMemory(): TerminalSettings =
+        if (persistent) readFromDisk() ?: _settings.value else _settings.value
 
     /** Write [value] atomically (temp + rename). Caller holds [saveLock]. */
     private fun writeToFileLocked(value: TerminalSettings) {
+        if (!persistent) return
         try {
             val jsonString = json.encodeToString(value)
             // UNIQUE temp name (not a fixed ".settings.json.tmp"): with the daemon enabled there are TWO
@@ -309,10 +314,31 @@ class SettingsManager(private val customSettingsPath: String? = null) {
     }
 
     companion object {
+        @Volatile
+        private var installed: SettingsManager? = null
+
         /**
-         * Global singleton instance using default settings path
+         * Global singleton instance using default settings path.
          */
-        val instance: SettingsManager by lazy { SettingsManager() }
+        val instance: SettingsManager
+            get() = installed ?: SettingsManager().also { installed = it }
+
+        /**
+         * Embedded mode: never read or write `settings.json` — the host owns the values.
+         *
+         * Hermes keeps its terminal appearance in `state.json`, so the standalone store would be a
+         * second, silently-diverging source of truth (and it lives in `~/.bossterm`). Call this
+         * before composing the terminal; it also downgrades an already-created instance.
+         */
+        @Synchronized
+        fun installInMemory(settings: TerminalSettings): SettingsManager {
+            // Create the in-memory manager directly: going through [instance] would construct the
+            // default, file-backed manager first and read `~/.bossterm/settings.json` once.
+            val manager = installed ?: SettingsManager(persistent = false).also { installed = it }
+            manager.persistent = false
+            manager.updateSettings(settings)
+            return manager
+        }
 
         /**
          * Create a new SettingsManager with a custom settings file path.

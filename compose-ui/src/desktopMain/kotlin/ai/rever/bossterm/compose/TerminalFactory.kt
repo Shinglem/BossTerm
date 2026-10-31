@@ -5,6 +5,7 @@ import ai.rever.bossterm.compose.features.shouldUseNativeMenus
 import ai.rever.bossterm.compose.ime.IMEState
 import ai.rever.bossterm.compose.session.TerminalSessionEngine
 import ai.rever.bossterm.compose.session.TerminalSessionStack
+import ai.rever.bossterm.compose.settings.SettingsManager
 import ai.rever.bossterm.compose.settings.TerminalSettings
 import ai.rever.bossterm.compose.shell.ShellCustomizationUtils
 import ai.rever.bossterm.compose.tabs.TerminalTab
@@ -27,6 +28,10 @@ import java.util.UUID
  * hand it to the composable, then call [startTerminalProcess] to launch the shell.
  */
 fun createTerminalTab(settings: TerminalSettings): TerminalTab {
+    // The host owns the settings (Hermes keeps them in state.json): run the settings manager in
+    // memory so no `~/.bossterm/settings.json` is read or written.
+    SettingsManager.installInMemory(settings)
+
     val styleState = StyleState()
     val textBuffer = TerminalTextBuffer(80, 24, styleState, settings.bufferMaxLines)
     val display = ComposeTerminalDisplay(settings)
