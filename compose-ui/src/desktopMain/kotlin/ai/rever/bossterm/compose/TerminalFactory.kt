@@ -85,6 +85,14 @@ fun createTerminalTab(settings: TerminalSettings): TerminalTab {
 }
 
 /**
+ * Visible column count of this tab's buffer.
+ *
+ * Exposed so hosts can report resize without depending on the core buffer type
+ * (which `compose-ui` keeps as an implementation detail).
+ */
+fun TerminalTab.columns(): Int = textBuffer.width
+
+/**
  * Starts the shell process for a tab returned by [createTerminalTab].
  *
  * @param command executable to run; null uses the platform default shell.
@@ -100,7 +108,7 @@ fun startTerminalProcess(
     platformServices: PlatformServices = getPlatformServices(),
     initialCommand: String? = null,
     onExit: ((Int) -> Unit)? = null,
-) {
+): TerminalSessionEngine {
     lateinit var engine: TerminalSessionEngine
     engine = TerminalSessionEngine(
         id = tab.id,
@@ -132,4 +140,5 @@ fun startTerminalProcess(
     )
     tab.attachEngine(engine)
     engine.start()
+    return engine
 }
