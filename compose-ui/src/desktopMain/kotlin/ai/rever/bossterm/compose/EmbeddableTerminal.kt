@@ -558,6 +558,15 @@ class EmbeddableTerminalState(
     private var initialized = false
 
     /**
+     * Active session, or null before initialization / after disposal.
+     *
+     * Exposed read-only for hosts that need to inspect the screen buffer
+     * (snapshots, "add selection to chat", diagnostics) without touching
+     * internal state.
+     */
+    val terminalTab: TerminalTab? get() = session
+
+    /**
      * Live mirror of the resolved `useNativeContextMenus` setting.
      *
      * The session is built once, so capturing the value there would freeze the preference for the
