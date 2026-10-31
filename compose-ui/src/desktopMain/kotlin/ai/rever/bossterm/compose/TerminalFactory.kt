@@ -98,6 +98,94 @@ fun createTerminalTab(settings: TerminalSettings): TerminalTab {
 fun TerminalTab.columns(): Int = textBuffer.width
 
 /**
+ * Text currently selected in this tab, or null when there is no selection.
+ *
+ * Selection rows are absolute buffer rows (history + screen), which is what the renderer
+ * and [ai.rever.bossterm.terminal.model.TerminalSelection] both use.
+ */
+fun TerminalTab.selectedText(): String? {
+    val snapshot = textBuffer.createIncrementalSnapshot()
+    val resolved = selectionTracker.resolveToCoordinates(snapshot) ?: return null
+
+    // resolveToCoordinates yields snapshot rows (screen >= 0, history < 0); the buffer's
+    // getLine() wants absolute rows starting at the oldest history line.
+    val history = snapshot.historyLinesCount
+    val forward = resolved.startRow <= resolved.endRow
+    val startRow = (minOf(resolved.startRow, resolved.endRow) + history).coerceAtLeast(0)
+    val endRow = (maxOf(resolved.startRow, resolved.endRow) + history).coerceAtLeast(0)
+    val startCol = if (forward) resolved.startCol else resolved.endCol
+    val endCol = if (forward) resolved.endCol else resolved.startCol
+
+    return buildString {
+        for (row in startRow..endRow) {
+            val line = textBuffer.getLine(row) ?: continue
+            val text = line.text
+            val from = if (row == startRow) startCol.coerceIn(0, text.length) else 0
+            val to = if (row == endRow) endCol.coerceIn(0, text.length) else text.length
+            if (to > from) append(text, from, to)
+            if (row < endRow) append('\n')
+        }
+    }.takeIf { it.isNotEmpty() }
+}
+
+/** One snapshot of the scrollback + screen, used by the host's `terminal.read` handler. */
+data class TerminalSnapshot(
+    val totalLines: Int,
+    val start: Int,
+    val end: Int,
+    val viewportRows: Int,
+    val cursorRow: Int,
+    val text: String,
+)
+
+/**
+ * Text of the buffer between absolute rows [start] and [start] + [count].
+ *
+ * Nulls follow the old JediTerm contract: [start] defaults to `total - count`,
+ * trailing blank lines are dropped, and [cursorRow] is absolute.
+ */
+fun TerminalTab.snapshot(start: Int? = null, count: Int? = null, defaultLines: Int = 200): TerminalSnapshot {
+    textBuffer.lock()
+    try {
+        val history = textBuffer.historyLinesCount
+        val viewport = textBuffer.height
+        val total = history + viewport
+        val from = (start ?: maxOf(0, total - (count ?: defaultLines))).coerceIn(0, total)
+        val to = minOf(total, from + (count ?: (total - from)))
+        val lines = ArrayList<String>(to - from)
+        for (row in from until to) {
+            lines += textBuffer.getLine(row)?.text.orEmpty()
+        }
+        while (lines.isNotEmpty() && lines.last().isBlank()) lines.removeAt(lines.lastIndex)
+        val cursorRow = runCatching { history + terminal.cursorY }.getOrDefault(history)
+        return TerminalSnapshot(
+            totalLines = total,
+            start = from,
+            end = to,
+            viewportRows = viewport,
+            cursorRow = cursorRow,
+            text = lines.joinToString("\n"),
+        )
+    } finally {
+        textBuffer.unlock()
+    }
+}
+
+/** Last [lines] lines of the buffer (scrollback included), newline separated. */
+fun TerminalTab.tailText(lines: Int = 200): String {
+    val total = textBuffer.height + textBuffer.historyLinesCount
+    if (total <= 0) return ""
+    val start = (total - lines).coerceAtLeast(0)
+    return buildString {
+        for (row in start until total) {
+            val line = textBuffer.getLine(row) ?: continue
+            append(line.text.trimEnd())
+            append('\n')
+        }
+    }
+}
+
+/**
  * Starts the shell process for a tab returned by [createTerminalTab].
  *
  * @param command executable to run; null uses the platform default shell.
