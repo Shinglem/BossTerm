@@ -6,14 +6,13 @@ import androidx.compose.runtime.State
 import ai.rever.bossterm.core.typeahead.TerminalTypeAheadManager
 import ai.rever.bossterm.terminal.model.BossTerminal
 import ai.rever.bossterm.terminal.model.TerminalTextBuffer
-import ai.rever.bossterm.compose.debug.DebugDataCollector
+import ai.rever.bossterm.compose.blocks.CommandBlockTracker
 import ai.rever.bossterm.compose.features.ContextMenuController
 import ai.rever.bossterm.compose.hyperlinks.Hyperlink
 import ai.rever.bossterm.compose.hyperlinks.HyperlinkHoverConsumer
 import ai.rever.bossterm.compose.ime.IMEState
 import ai.rever.bossterm.compose.selection.SelectionTracker
 import ai.rever.bossterm.compose.typeahead.ComposeTypeAheadModel
-import ai.rever.bossterm.compose.ai.AICommandInterceptor
 
 /**
  * Interface representing a terminal session abstraction.
@@ -212,12 +211,6 @@ interface TerminalSession {
      */
     val debugPanelVisible: MutableState<Boolean>
 
-    /**
-     * Debug data collector for capturing I/O chunks and terminal state snapshots.
-     * Null when debug mode is disabled.
-     */
-    val debugCollector: DebugDataCollector?
-
     // === Type-Ahead Prediction ===
 
     /**
@@ -232,27 +225,12 @@ interface TerminalSession {
      */
     val typeAheadManager: TerminalTypeAheadManager?
 
-    // === AI Command Interception ===
-
     /**
-     * AI command interceptor for detecting AI assistant commands before execution.
-     * When set, this interceptor tracks user input and can intercept Enter key
-     * to show an install prompt if an AI assistant command is typed but not installed.
-     * Null when AI assistant integration is disabled.
-     */
-    val aiCommandInterceptor: AICommandInterceptor?
-        get() = null  // Default implementation returns null
-
-    // === Command Blocks ===
-
-    /**
-     * Per-session command-block tracker (OSC 133). Captures one
-     * [ai.rever.bossterm.compose.blocks.CommandBlock] per command for the gutter,
-     * scrollbar markers, and jump/copy/re-run actions. Null when the implementation
+     * Per-session command-block tracker (OSC 133). Null when the implementation
      * does not track command blocks.
      */
-    val commandBlockTracker: ai.rever.bossterm.compose.blocks.CommandBlockTracker?
-        get() = null  // Default implementation returns null
+    val commandBlockTracker: CommandBlockTracker?
+        get() = null
 
     // === Warp-style tab customization ===
 

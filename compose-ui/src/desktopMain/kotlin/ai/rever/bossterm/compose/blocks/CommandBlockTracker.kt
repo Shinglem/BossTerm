@@ -112,11 +112,6 @@ class CommandBlockTracker(
             }
             openId = -1L
         }
-        // Backfill the MCP last-command record with the captured command text
-        // (LastCommandTracker intentionally leaves commandText null).
-        closed?.commandText?.let { text ->
-            tab.lastCommand.value = tab.lastCommand.value?.copy(commandText = text)
-        }
     }
 
     /** Replace the block with [id] via [transform]. Caller must hold [lock]. */

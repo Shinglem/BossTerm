@@ -70,12 +70,9 @@ class BlockingTerminalDataStream(
     private val queuedCheckpoints = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<String, CheckpointRequest>())
     private val queuedCheckpointMarkers = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(java.util.IdentityHashMap<String, Boolean>()))
     private val checkpointCount = AtomicInteger()
-    private data class ProcessedListener(val output: (String) -> Unit, val failed: (Exception) -> Unit, val filtered: Boolean)
+    private data class ProcessedListener(val output: (String) -> Unit, val failed: (Exception) -> Unit)
     private val processedListeners = CopyOnWriteArrayList<ProcessedListener>()
     private val processedChars = StringBuilder()
-    private var graphicsFilter = ai.rever.bossterm.compose.share.GraphicsOutputFilter()
-    private val filteredPending = StringBuilder()
-    private val filteredInstruction = StringBuilder()
     private var readingInstructionStart = false
 
     internal suspend fun <T> atCheckpoint(capture: () -> T): T {
@@ -127,10 +124,9 @@ class BlockingTerminalDataStream(
     internal suspend fun <T> observeProcessedOutput(
         listener: (String) -> Unit,
         onFailure: (Exception) -> Unit = {},
-        graphicsFiltered: Boolean = false,
         capture: () -> T,
     ): ProcessedSubscription<T> {
-        val observer = ProcessedListener(listener, onFailure, graphicsFiltered)
+        val observer = ProcessedListener(listener, onFailure)
         val cancelled = java.util.concurrent.atomic.AtomicBoolean()
         try {
             val snapshot = atCheckpoint {
@@ -138,12 +134,6 @@ class BlockingTerminalDataStream(
                 if (processedListeners.isEmpty()) {
                     processedChars.setLength(0)
                     pushBackStack.asReversed().forEach { processedChars.append(it) }
-                }
-                if (graphicsFiltered && processedListeners.none { it.filtered }) {
-                    graphicsFilter = ai.rever.bossterm.compose.share.GraphicsOutputFilter()
-                    filteredPending.setLength(0)
-                    filteredInstruction.setLength(0)
-                    pushBackStack.asReversed().forEach { filteredPending.append(it) }
                 }
                 processedListeners.add(observer)
                 if (cancelled.get()) processedListeners.remove(observer)
@@ -169,7 +159,7 @@ class BlockingTerminalDataStream(
             if (applied > 0) {
                 val output = processedChars.substring(0, applied)
                 processedChars.delete(0, applied)
-                for (listener in processedListeners.filter { !it.filtered }) {
+                for (listener in processedListeners) {
                     // Sharing must never break execution of a local terminal.
                     try { listener.output(output) } catch (e: Exception) {
                         processedListeners.remove(listener)
@@ -178,24 +168,6 @@ class BlockingTerminalDataStream(
                 }
             }
         } else processedChars.setLength(0)
-        if (processedListeners.any { it.filtered }) {
-            val applied = filteredPending.length - pushBackStack.size
-            if (applied > 0) {
-                filteredInstruction.append(graphicsFilter.filter(filteredPending.substring(0, applied)).output)
-                filteredPending.delete(0, applied)
-            }
-            val output = filteredInstruction.toString()
-            filteredInstruction.setLength(0)
-            for (listener in processedListeners.filter { it.filtered }) {
-                try { listener.output(output) } catch (e: Exception) {
-                    processedListeners.remove(listener)
-                    runCatching { listener.failed(e) }
-                }
-            }
-        } else {
-            filteredPending.setLength(0)
-            filteredInstruction.setLength(0)
-        }
         runCheckpoints()
     }
 
@@ -221,28 +193,12 @@ class BlockingTerminalDataStream(
 
     private fun recordProcessedChar(c: Char) {
         if (processedListeners.isEmpty()) return
-        if (processedListeners.any { !it.filtered } && processedChars.length >= 1024 * 1024) {
-            val observers = processedListeners.filter { !it.filtered }
+        if (processedChars.length >= 1024 * 1024) {
+            val observers = processedListeners.toList()
             processedListeners.removeAll(observers.toSet())
             processedChars.setLength(0)
             observers.forEach { runCatching { it.failed(IOException("Terminal relay instruction exceeded buffer limit")) } }
-        } else if (processedListeners.any { !it.filtered }) processedChars.append(c)
-        if (processedListeners.any { it.filtered }) {
-            filteredPending.append(c)
-            // Keep look-ahead characters unfiltered until processChar completes. Large graphics
-            // strings are discarded incrementally rather than retained until their terminator.
-            if (filteredPending.length >= 16_384) {
-                val count = filteredPending.length - 16
-                filteredInstruction.append(graphicsFilter.filter(filteredPending.substring(0, count)).output)
-                filteredPending.delete(0, count)
-                if (filteredInstruction.length > 1024 * 1024) {
-                    val observers = processedListeners.filter { it.filtered }
-                    processedListeners.removeAll(observers.toSet())
-                    filteredPending.setLength(0); filteredInstruction.setLength(0)
-                    observers.forEach { runCatching { it.failed(IOException("Terminal relay instruction exceeded buffer limit")) } }
-                }
-            }
-        }
+        } else processedChars.append(c)
     }
 
     private val buffer = StringBuilder()

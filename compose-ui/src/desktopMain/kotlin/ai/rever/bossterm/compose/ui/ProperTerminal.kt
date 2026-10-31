@@ -1,9 +1,5 @@
 package ai.rever.bossterm.compose.ui
 
-import ai.rever.bossterm.compose.window.surfaceOpacity
-import ai.rever.bossterm.compose.window.LocalNativeWindowGlass
-import ai.rever.bossterm.compose.window.LocalWindowGlassMode
-
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -68,14 +64,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import ai.rever.bossterm.compose.ComposeTerminalDisplay
 import ai.rever.bossterm.compose.ConnectionState
-import ai.rever.bossterm.compose.PreConnectScreen
+import ai.rever.bossterm.compose.util.submitLine
 import ai.rever.bossterm.compose.actions.addSplitPaneActions
 import ai.rever.bossterm.compose.actions.addTabManagementActions
 import ai.rever.bossterm.compose.actions.createBuiltinActions
-import ai.rever.bossterm.compose.util.submitLine
 import ai.rever.bossterm.compose.splits.NavigationDirection
 import ai.rever.bossterm.compose.menu.MenuActions
-import ai.rever.bossterm.compose.debug.DebugWindow
 import ai.rever.bossterm.compose.features.ContextMenuController
 import ai.rever.bossterm.compose.features.showHyperlinkContextMenu
 import ai.rever.bossterm.compose.features.showTerminalContextMenu
@@ -328,7 +322,7 @@ fun ProperTerminal(
    * the bottom are not compensation for a scrolled viewport, and folding them makes the first
    * scrolled frame jump.
    */
-  fun setScrollOffset(target: Int) = tab.scrollTo(target)
+  fun setScrollOffset(target: Int) { tab.scrollOffset.value = target }
 
   // Command blocks captured for this session (OSC 133). Collected so the gutter
   // and scrollbar markers repaint as commands start and finish. Falls back to a
@@ -342,19 +336,6 @@ fun ProperTerminal(
   // Command palette overlay visibility (toggled by the command_palette action).
   var commandPaletteVisible by remember { mutableStateOf(false) }
 
-  // Workflows for this session (Phase 3); reloaded when cwd / settings change.
-  val workflows = remember(tab.workingDirectory.value, settings.workflowsEnabled, settings.workflowExtraDirs) {
-    if (settings.workflowsEnabled) {
-      ai.rever.bossterm.compose.workflows.WorkflowStore(
-        extraDirs = settings.workflowExtraDirs.map { java.io.File(it) }
-      ).load(tab.workingDirectory.value)
-    } else {
-      emptyList()
-    }
-  }
-  // When non-null, the workflow parameter dialog is shown for this workflow.
-  var pendingWorkflow by remember { mutableStateOf<ai.rever.bossterm.compose.workflows.Workflow?>(null) }
-
   // History search overlay visibility (Ctrl+R when enabled and not in an alt-screen app).
   var historySearchVisible by remember { mutableStateOf(false) }
 
@@ -366,7 +347,6 @@ fun ProperTerminal(
 
   // Debug panel state from tab
   var debugPanelVisible by tab.debugPanelVisible
-  val debugCollector = tab.debugCollector
   var currentMatchIndex by tab.currentSearchMatchIndex
 
   // IME state from tab
@@ -1016,12 +996,7 @@ fun ProperTerminal(
       .fillMaxSize()
       .onPreviewKeyEvent { keyEvent ->
         if (keyEvent.type == KeyEventType.KeyDown) {
-          // The host user is interacting with this pane — release any remote
-          // "fit host to my screen" resize (no-op unless a fit is active here).
-          ai.rever.bossterm.compose.share.SessionShareManager.notifyHostInteraction(tab.id)
-        }
-        // Handle Cmd+F toggle at the top level so it works regardless of which child has focus
-        if (keyEvent.type == KeyEventType.KeyDown) {
+          // Handle Cmd+F toggle at the top level so it works regardless of which child has focus
           val action = actionRegistry.getAction("search")
           if (action != null && action.matchesKeyEvent(keyEvent, isMacOS)) {
             action.execute(keyEvent)
@@ -1151,12 +1126,7 @@ fun ProperTerminal(
           }
         }
         .fillMaxSize()
-        .background(settings.defaultBackgroundColor.copy(
-            // Whole-window glass is tinted once by the window surface, including
-            // the toolbar. A second terminal-only tint creates a visible seam.
-            alpha = if (LocalNativeWindowGlass.current && LocalWindowGlassMode.current.includesTerminal) 0f
-                else LocalWindowGlassMode.current.terminalOpacity(settings.surfaceOpacity(LocalNativeWindowGlass.current))
-        ))
+        .background(settings.defaultBackgroundColor)
         .dragAndDropTarget(
           shouldStartDragAndDrop = { true },
           target = dropTarget
@@ -1166,9 +1136,6 @@ fun ProperTerminal(
           // Skip if event was already consumed by an overlay (SearchBar, DebugPanel, etc.)
           if (change.isConsumed) return@onPointerEvent
           if (change.pressed && change.previousPressed.not()) {
-            // Host user clicked into this pane — release any remote "fit host"
-            // resize (no-op unless a fit is active here).
-            ai.rever.bossterm.compose.share.SessionShareManager.notifyHostInteraction(tab.id)
             // FIRST: Set pane focus before any other processing
             // This ensures split pane focus is set even when mouse events are
             // forwarded to terminal applications (like nvim with mouse reporting)
@@ -1975,18 +1942,6 @@ fun ProperTerminal(
               }
 
               if (text.isNotEmpty()) {
-                // AI Command Interception: Check if typing an AI assistant command
-                // For single characters, let the interceptor track input and potentially
-                // consume Enter if it detects an uninstalled AI assistant command
-                val interceptor = tab.aiCommandInterceptor
-                if (interceptor != null && text.length == 1) {
-                  if (interceptor.onCharacterTyped(text[0])) {
-                    // Character consumed by interceptor (e.g., Enter on AI command)
-                    // Don't send to PTY - interceptor triggered install prompt
-                    return@launch
-                  }
-                }
-
                 // Auto-scroll to cursor when user types (standard terminal behavior)
                 // If scrolled into history, snap back to current screen so user sees their input
                 if (settings.scrollToBottomOnTyping) {
@@ -2023,14 +1978,7 @@ fun ProperTerminal(
       // Show loading/error screen before connection is established. Remote mirror tabs have
       // no local PTY connection — they render directly from the streamed buffer.
       if (connectionState !is ConnectionState.Connected && !tab.isRemote) {
-        PreConnectScreen(
-          state = connectionState,
-          onRetry = {
-            // Reset to initializing and trigger re-composition
-            // The LaunchedEffect will run again automatically
-            connectionState = ConnectionState.Initializing
-          }
-        )
+        androidx.compose.material3.Text("Connecting...")
       } else {
         // Only show terminal UI when connected
 
@@ -2407,102 +2355,6 @@ fun ProperTerminal(
           modifier = Modifier.align(Alignment.TopEnd)
         )
 
-        // Command palette overlay (Phase 2)
-        if (commandPaletteVisible) {
-          val paletteCommands = remember(commandBlocks, actionRegistry, workflows) {
-            ai.rever.bossterm.compose.palette.PaletteSources.collect(
-              actions = actionRegistry,
-              recentCommands = commandBlocks.mapNotNull { it.commandText },
-              // Prefill, so verbatim: the command lands at the prompt for the user to edit and
-              // submit themselves. One of four such sites in this file (command palette, history
-              // search, AI suggestion, and the non-auto-run workflow below) — all single-line
-              // today, so no LF reaches the PTY. If a multi-line source ever feeds one, the answer
-              // is bracketed paste like pasteText, not submitLine: converting the newlines would
-              // run the lines instead of offering them. See submitLine for why CR and not LF.
-              insertCommand = { cmd -> tab.writeUserInput(cmd) },
-              workflows = workflows,
-              onRunWorkflow = { wf -> pendingWorkflow = wf }
-            )
-          }
-          ai.rever.bossterm.compose.palette.CommandPalette(
-            visible = true,
-            commands = paletteCommands,
-            onDismiss = {
-              commandPaletteVisible = false
-              scope.launch {
-                kotlinx.coroutines.delay(50)
-                focusRequester.requestFocus()
-              }
-            }
-          )
-        }
-
-        // Workflow parameter dialog (Phase 3)
-        pendingWorkflow?.let { wf ->
-          ai.rever.bossterm.compose.workflows.WorkflowRunDialog(
-            workflow = wf,
-            autoRun = settings.workflowsAutoRun,
-            onDismiss = {
-              pendingWorkflow = null
-              scope.launch {
-                kotlinx.coroutines.delay(50)
-                focusRequester.requestFocus()
-              }
-            },
-            onSubmit = { rendered ->
-              // Auto-run submits; otherwise the rendered text is left at the prompt for the user to
-              // edit, so it is passed through untouched. Note the prefill only really holds on
-              // Windows: under ICRNL a multi-line workflow's LFs submit each line on arrival
-              // anyway. Unchanged from before this rule existed — just not universal.
-              tab.writeUserInput(
-                if (settings.workflowsAutoRun) submitLine(rendered) else rendered
-              )
-            }
-          )
-        }
-
-        // History search overlay (Phase 4)
-        if (historySearchVisible) {
-          // Load shell-history files off the UI thread; show empty until ready.
-          val historyEntries by androidx.compose.runtime.produceState(
-            initialValue = emptyList<String>(), commandBlocks
-          ) {
-            val recent = commandBlocks.mapNotNull { it.commandText }
-            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-              ai.rever.bossterm.compose.history.HistoryStore.load(recent)
-            }
-          }
-          val restoreFocus = {
-            historySearchVisible = false
-            scope.launch {
-              kotlinx.coroutines.delay(50)
-              focusRequester.requestFocus()
-            }
-            Unit
-          }
-          ai.rever.bossterm.compose.history.HistorySearchOverlay(
-            visible = true,
-            history = historyEntries,
-            // Prefill, verbatim — see insertCommand above for why these four sites stay raw.
-            onSelect = { cmd -> tab.writeUserInput(cmd); restoreFocus() },
-            onDismiss = { restoreFocus() },
-            aiEnabled = settings.aiCommandBarEnabled && settings.aiCommandBarPrintFlag.isNotBlank(),
-            onAskAi = { query ->
-              restoreFocus()
-              scope.launch {
-                val suggestion = ai.rever.bossterm.compose.ai.AiCommandSuggester.suggest(
-                  agentCommand = settings.aiCommandBarAgentCommand,
-                  printFlag = settings.aiCommandBarPrintFlag,
-                  naturalLanguage = query
-                )
-                // Prefill, verbatim — see insertCommand above. AiCommandSuggester returns one
-                // trimmed line, so there is nothing to convert even if we wanted to.
-                if (!suggestion.isNullOrBlank()) tab.writeUserInput(suggestion)
-              }
-            }
-          )
-        }
-
         // Restore focus to terminal when debug window closes
         LaunchedEffect(debugPanelVisible) {
           if (!debugPanelVisible && isActiveTab) {
@@ -2702,14 +2554,6 @@ fun ProperTerminal(
         }
       }
     } // end Box
-
-    // Debug window (separate window)
-    DebugWindow(
-      visible = debugPanelVisible,
-      collector = debugCollector,
-      textBuffer = textBuffer,
-      onClose = { debugPanelVisible = false }
-    )
 
     DisposableEffect(Unit) {
       onDispose {
