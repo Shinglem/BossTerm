@@ -151,12 +151,13 @@ fun createBuiltinActions(
         }
     )
 
-    // TOGGLE_IME - Ctrl+Space
-    // Toggles IME (Input Method Editor) for CJK input
+    // TOGGLE_IME - Ctrl+Alt+I
+    // Toggles IME (Input Method Editor) for CJK input. Ctrl+Space / Ctrl+Shift+Space are
+    // both grabbed by Microsoft Pinyin itself, so the shortcut uses Ctrl+Alt+I.
     val toggleImeAction = TerminalAction(
         id = "toggle_ime",
         name = "Toggle IME",
-        keyStroke = KeyStroke(key = Key.Spacebar, ctrl = true),
+        keyStroke = KeyStroke(key = Key.I, ctrl = true, alt = true),
         enabled = { true },
         handler = { _ ->
             imeState.toggle()

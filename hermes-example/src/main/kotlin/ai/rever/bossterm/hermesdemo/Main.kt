@@ -48,6 +48,9 @@ fun main() = application {
                     Button(onClick = { showDialog = true }) {
                         Text("open dialog (z-order check)")
                     }
+                    Button(onClick = { tab.imeState.enable() }, Modifier.padding(start = 8.dp)) {
+                        Text("IME")
+                    }
                 }
                 Box(Modifier.weight(1f)) {
                     ProperTerminal(
