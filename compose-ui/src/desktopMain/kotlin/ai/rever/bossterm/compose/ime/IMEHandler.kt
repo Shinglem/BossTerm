@@ -2,6 +2,7 @@ package ai.rever.bossterm.compose.ime
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -9,8 +10,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /**
@@ -47,7 +51,10 @@ fun IMEHandler(
 ) {
     if (!enabled) return
 
-    var textFieldValue by remember { mutableStateOf("") }
+    var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
+    // Compose delivers the same committed text more than once (composition end + value
+    // reset). Without this guard a single "你好" is written to the PTY three times.
+    var lastCommitted by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
 
     // Position TextField at cursor location (use roundToInt to prevent cumulative drift)
@@ -58,22 +65,23 @@ fun IMEHandler(
         BasicTextField(
             value = textFieldValue,
             onValueChange = { newValue ->
-                // Detect composition commit (when IME finalizes input)
-                // This happens when user selects a candidate from IME popup
-                if (newValue.isNotEmpty() && newValue != textFieldValue) {
-                    // Check if this is a commit (no pending composition)
-                    // In Compose, committed text appears as regular text
-                    val committedText = newValue
-                    if (committedText.isNotEmpty()) {
-                        onTextCommit(committedText)
-                        textFieldValue = "" // Clear for next input
-                        return@BasicTextField
+                // While an IME composition is active the text is only a preview (pinyin and
+                // friends). Forwarding it right away is what made Chinese input land in the
+                // shell as raw letters, so wait until the composition is committed.
+                if (newValue.composition == null) {
+                    val text = newValue.text
+                    if (text.isNotEmpty() && text != lastCommitted) {
+                        lastCommitted = text
+                        onTextCommit(text)
                     }
+                    if (textFieldValue.text.isNotEmpty()) textFieldValue = TextFieldValue("")
+                } else {
+                    textFieldValue = newValue
                 }
-                textFieldValue = newValue
             },
             modifier = Modifier
                 .offset { IntOffset(offsetX, offsetY) }
+                .size(1.dp) // keep the field focusable without painting over the grid
                 .focusRequester(focusRequester),
             textStyle = TextStyle(
                 color = Color.Transparent, // Invisible text
@@ -83,14 +91,15 @@ fun IMEHandler(
         )
     }
 
-    // Auto-focus the TextField when enabled
+    // Auto-focus the TextField when enabled. The field must be in the layout before
+    // requestFocus() is called, otherwise it throws and CJK input silently falls back to
+    // raw key events (the old behaviour).
     LaunchedEffect(enabled) {
         if (enabled) {
-            try {
-                focusRequester.requestFocus()
-            } catch (e: Exception) {
-                // Focus request may fail if TextField not yet composed
-            }
+            lastCommitted = ""
+            withFrameNanos { }
+            delay(50)
+            runCatching { focusRequester.requestFocus() }
         }
     }
 }
