@@ -9,6 +9,7 @@ pluginManagement {
 rootProject.name = "bossterm"
 include(
     ":bossterm-core-mpp",
-    ":compose-ui"
+    ":compose-ui",
+    ":hermes-example"
 )
 
