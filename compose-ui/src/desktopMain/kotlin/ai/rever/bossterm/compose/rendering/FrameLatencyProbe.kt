@@ -1,5 +1,6 @@
 package ai.rever.bossterm.compose.rendering
 
+import ai.rever.bossterm.compose.daemon.BossTermPaths
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -107,7 +108,7 @@ object FrameLatencyProbe {
      * files in one scripted run.
      */
     private val outFile: File =
-        File(System.getenv("BOSSTERM_FRAME_PROBE_OUT") ?: "${System.getProperty("user.home")}/.bossterm/frame-probe.json")
+        File(System.getenv("BOSSTERM_FRAME_PROBE_OUT") ?: "${BossTermPaths.dir()}/frame-probe.json")
 
     /**
      * Touch this file to zero the histograms before a workload; the sampler consumes and

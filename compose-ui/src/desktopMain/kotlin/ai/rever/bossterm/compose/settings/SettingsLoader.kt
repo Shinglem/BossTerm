@@ -1,5 +1,6 @@
 package ai.rever.bossterm.compose.settings
 
+import ai.rever.bossterm.compose.daemon.BossTermPaths
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
 import java.io.File
@@ -20,7 +21,7 @@ object SettingsLoader {
     }
 
     private val defaultSettingsFile: File by lazy {
-        File(System.getProperty("user.home"), ".bossterm/settings.json")
+        BossTermPaths.settingsFile()
     }
 
     /**

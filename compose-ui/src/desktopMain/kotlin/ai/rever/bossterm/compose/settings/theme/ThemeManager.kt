@@ -1,5 +1,6 @@
 package ai.rever.bossterm.compose.settings.theme
 
+import ai.rever.bossterm.compose.daemon.BossTermPaths
 import ai.rever.bossterm.compose.settings.SettingsManager
 import ai.rever.bossterm.compose.settings.TerminalSettings
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,9 +75,7 @@ class ThemeManager private constructor(
     }
 
     private val themesDir: File by lazy {
-        File(System.getProperty("user.home"), ".bossterm").apply {
-            if (!exists()) mkdirs()
-        }
+        BossTermPaths.dir()
     }
 
     private val themesFile: File by lazy {

@@ -1,5 +1,6 @@
 package ai.rever.bossterm.compose.shell
 
+import ai.rever.bossterm.compose.daemon.BossTermPaths
 import ai.rever.bossterm.compose.settings.SettingsManager
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -31,7 +32,7 @@ object ShellIntegrationInjector {
 
     // Lazy-initialized integration directory
     private val integrationDir: File by lazy {
-        File(System.getProperty("user.home"), ".bossterm/shell-integration").also { dir ->
+        File(BossTermPaths.dir(), "shell-integration").also { dir ->
             extractAllResources(dir)
             installOpenShims(dir)
         }

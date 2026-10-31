@@ -1,5 +1,6 @@
 package ai.rever.bossterm.compose.settings.theme
 
+import ai.rever.bossterm.compose.daemon.BossTermPaths
 import ai.rever.bossterm.compose.settings.SettingsManager
 import ai.rever.bossterm.compose.util.ColorUtils
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,9 +55,7 @@ class ColorPaletteManager private constructor(
     }
 
     private val palettesDir: File by lazy {
-        File(System.getProperty("user.home"), ".bossterm").apply {
-            if (!exists()) mkdirs()
-        }
+        BossTermPaths.dir()
     }
 
     private val palettesFile: File by lazy {
