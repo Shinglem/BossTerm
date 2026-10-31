@@ -232,10 +232,15 @@ data class TerminalSettings(
 
     /**
      * Default shell for Windows.
-     * Options: "powershell" (default), "cmd"
+     * Options: "auto" (default), "pwsh", "powershell", "cmd"
+     * - "auto"       : PowerShell 7 (pwsh.exe) → Windows PowerShell 5.1 → cmd.exe, first one found
+     * - "pwsh"       : same as "auto"
+     * - "powershell" : Windows PowerShell 5.1, falls back to cmd.exe
+     * - "cmd"        : cmd.exe
+     * An explicit `command` passed to the terminal factory always wins.
      * Only affects Windows; other platforms use $SHELL or /bin/bash.
      */
-    val windowsShell: String = "powershell",
+    val windowsShell: String = "auto",
 
     /**
      * Initial command to run when a new terminal tab is created.

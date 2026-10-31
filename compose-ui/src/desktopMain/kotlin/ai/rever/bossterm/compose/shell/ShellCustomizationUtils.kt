@@ -14,16 +14,16 @@ object ShellCustomizationUtils {
      * Get a valid shell command, with fallback if $SHELL is not available.
      *
      * Checks in order:
-     * - Windows: Uses windowsShell setting ("powershell" or "cmd")
+     * - Windows: [getWindowsShellCommand] with the `windowsShell` setting
      * - Unix/Linux/macOS:
      *   1. $SHELL environment variable (if the file exists and is executable)
      *   2. /bin/bash (common default)
      *   3. /bin/sh (POSIX fallback, always available)
      *
-     * @param windowsShell The preferred Windows shell ("powershell" or "cmd")
+     * @param windowsShell The preferred Windows shell ("auto" / "pwsh" / "powershell" / "cmd")
      * @return Path to a valid shell executable
      */
-    fun getValidShell(windowsShell: String = "powershell"): String {
+    fun getValidShell(windowsShell: String = "auto"): String {
         val osName = System.getProperty("os.name")?.lowercase() ?: ""
 
         // Windows: use configured shell
@@ -52,23 +52,25 @@ object ShellCustomizationUtils {
 
     /**
      * Get the Windows shell command based on setting.
-     * Falls back to cmd.exe if PowerShell is unavailable.
-     * @param shellType "powershell" or "cmd"
+     *
+     * `"auto"` / `"pwsh"` prefer PowerShell 7 (`pwsh.exe`, the `pwsh` on PATH), then fall back to
+     * Windows PowerShell 5.1, then to `cmd.exe` — so a machine without PowerShell 7 still gets a
+     * working terminal instead of an empty tab.
+     *
+     * @param shellType "auto" / "pwsh" / "powershell" / "cmd"
      * @return The shell executable name
      */
     fun getWindowsShellCommand(shellType: String): String {
-        return when (shellType.lowercase()) {
+        return when (shellType.trim().lowercase()) {
             "cmd" -> "cmd.exe"
-            else -> {
-                // Try PowerShell first, fallback to cmd.exe if unavailable
-                if (isCommandInstalled("powershell.exe")) {
-                    "powershell.exe"
-                } else {
-                    "cmd.exe"
-                }
-            }
+            "powershell" -> if (isCommandInstalled("powershell.exe")) "powershell.exe" else "cmd.exe"
+            else -> firstInstalledCommand("pwsh.exe", "powershell.exe") ?: "cmd.exe"
         }
     }
+
+    /** First command on PATH that exists, or null when none do. */
+    private fun firstInstalledCommand(vararg candidates: String): String? =
+        candidates.firstOrNull { isCommandInstalled(it) }
 
     // ===== Platform Detection =====
 
