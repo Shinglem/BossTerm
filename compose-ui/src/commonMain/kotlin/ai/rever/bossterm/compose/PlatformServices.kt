@@ -63,7 +63,16 @@ interface PlatformServices {
             val command: String,
             val arguments: List<String>,
             val environment: Map<String, String> = emptyMap(),
-            val workingDirectory: String? = null
+            val workingDirectory: String? = null,
+            /**
+             * PTY 的初始窗口尺寸。0 = 由实现挑一个安全默认值。
+             *
+             * 必须在 spawn 时就给对：子进程（尤其 PowerShell 7 启动时打印更新通知）
+             * 读的是**创建时**的窗口宽度，等到 Compose 量出真实 grid 再 resize 已经晚了 ——
+             * 宽度异常时 PowerShell 的 `PadRight(width - N)` 会拿到负数并 FailFast。
+             */
+            val initialColumns: Int = 0,
+            val initialRows: Int = 0,
         )
 
         /**

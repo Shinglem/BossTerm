@@ -14,6 +14,18 @@ import kotlinx.coroutines.ensureActive
  */
 actual fun getPlatformServices(): PlatformServices = DesktopPlatformServices()
 
+/** PTY 的最小/默认列宽：低于这个值子进程会读到不存在的窗口宽度（PowerShell 直接崩）。 */
+private const val MIN_PTY_COLUMNS = 40
+private const val MIN_PTY_ROWS = 10
+private const val DEFAULT_PTY_COLUMNS = 120
+private const val DEFAULT_PTY_ROWS = 30
+
+internal fun Int.clampColumns(): Int =
+    if (this <= 0) DEFAULT_PTY_COLUMNS else coerceIn(MIN_PTY_COLUMNS, 500)
+
+internal fun Int.clampRows(): Int =
+    if (this <= 0) DEFAULT_PTY_ROWS else coerceIn(MIN_PTY_ROWS, 200)
+
 class DesktopPlatformServices : PlatformServices {
     private val clipboardService = DesktopClipboardService()
     private val fileSystemService = DesktopFileSystemService()
@@ -107,6 +119,10 @@ class DesktopProcessService(
             .setCommand(command)
             .setEnvironment(config.environment)
             .setDirectory(config.workingDirectory ?: System.getProperty("user.home"))
+            // PTY 创建时就要有合理的窗口尺寸：子进程读的是创建时的值，
+            // 尺寸异常会让 PowerShell 7 的启动横幅在 `PadRight(width - N)` 里拿到负数直接崩。
+            .setInitialColumns(config.initialColumns.clampColumns())
+            .setInitialRows(config.initialRows.clampRows())
             .setConsole(false) // Don't attach to parent console
             .setWindowsAnsiColorEnabled(isWindows) // Enable ANSI colors on Windows
             .setUseWinConPty(isWindows) // Use Windows ConPTY for better compatibility
@@ -343,7 +359,9 @@ class DesktopProcessService(
         }
 
         override suspend fun resize(columns: Int, rows: Int) {
-            process.setWinSize(com.pty4j.WinSize(columns, rows))
+            // 0 / 负数列数会让子进程读到一个不存在的窗口宽度（PowerShell 会直接崩），
+            // 布局未就绪时传 0 是常态，所以这里兜住而不是放任。
+            process.setWinSize(com.pty4j.WinSize(columns.clampColumns(), rows.clampRows()))
         }
 
         override fun getExitCode(): Int? = if (process.isAlive) null else process.exitValue()

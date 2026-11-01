@@ -255,6 +255,9 @@ class TerminalSessionEngine(
                     ),
                     environment = env,
                     workingDirectory = workingDir ?: System.getProperty("user.home"),
+                    // 真实 grid 可能还是 0（会话刚建、Compose 尚未布局），交给实现兜底。
+                    initialColumns = (lastResize?.first ?: initCols),
+                    initialRows = (lastResize?.second ?: initRows),
                 )
                 val h = platformServices.getProcessService().spawnProcess(config)
                 if (h == null) {
